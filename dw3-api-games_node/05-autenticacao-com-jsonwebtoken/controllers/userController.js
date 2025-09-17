@@ -2,15 +2,37 @@
 import gameService from "../services/gameService.js";
 import userServices from "../services/userServices.js";
 import jwt from 'jsonwebtoken'
+
+// IMPORTANDO O DOTENV (variavel de ambiente)
+import dotenv from "dotenv"
+dotenv.config();
+
 // segredo para token (é recomendado que o segredo esteja nas variaveis de ambiente)
-const JWTSecret = 'apithegames'
+const JWTSecret = process.env.JWTSECRET;
+
+//importando o bcrypt para fazer o hash da senha
+import bcrypt from "bcrypt"
 
 // funçao para cadastrar um Usuario
 const createUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    await userServices.Create(name, email, password);
-    res.status(201).json({ success: "Usuario cadastrado com suceso" }); // cod.201--> criado
+
+    // vereficar se o usuario ja exsite
+    const user = await userServices.getOne(email);
+    // se nao houver usuario cadastrado
+    if (user == undefined) {
+      // aqui sera feito o hash da senha
+      const salt = bcrypt.genSaltSync(10);
+      const hash = bcrypt.hashSync(password, salt)
+      //cadastro do usuario 
+      await userServices.Create(name, email, hash);
+      res.status(201).json({ success: "Usuario cadastrado com suceso" }); // cod.201--> criado
+      //se o usuario ja tiver cadastrado 
+    }else {
+      res.status(409).json({ error : "O usuario informado ja esta informado"})
+      // CODIGO 409 (CONFLITO)
+    }
   } catch (error) {
     console.log(error);
     res.sendStatus(500); // erro interno
@@ -24,7 +46,11 @@ const loginUser = async (req, res) => {
     const user = await userServices.getOne(email);
     if (user != undefined) {
       // fazendo a validaçao da senha (SENHA CORRETA)
-      if(user.password == password){
+
+      //COMPARANDO O HASH DE SENHA
+      const correct = bcrypt.compareSync(password, user.password)
+      //SE A SENHA FOR VALIDA
+      if(correct){
         //gerando token com JWT
         jwt.sign({id: user.id, email: user.email}, JWTSecret, {expiresIn: '48h'}, (error, token) => {
           if(error){
